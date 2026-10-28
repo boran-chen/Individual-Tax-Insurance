@@ -6,29 +6,39 @@
 - 省级负责人：只查看/下载本人负责组织的四 Sheet 申报数据；下载加工后回传；查看比对结果。
 - 系统：按“证件号码 + 姓名”逐条比对回传数据与原始数据，有差异不通过；零差异才进入当月归集。
 
+仓库地址：<https://github.com/boran-chen/Individual-Tax-Insurance>
+
+## 环境要求
+
+- Node.js 24 及以上（使用内置 `node:sqlite`，最低需 22.5+）
+- npm 10 及以上
+- 无需单独安装数据库或原生模块
+
 ## 快速开始
 
 ```bash
+git clone https://github.com/boran-chen/Individual-Tax-Insurance.git
+cd Individual-Tax-Insurance
 npm install
 npm run setup
 npm run generate:sample
 npm run dev
 ```
 
-打开 http://localhost:3000 。
+打开 <http://localhost:3000>。
 
-> 本仓库在当前环境中通过用户终端执行 `npm install`（构建会话的沙箱禁止访问 npm registry）；在普通开发机上直接执行即可。
+> 样例 Excel（`samples/*.xlsx`）不随仓库提交，需先执行 `npm run generate:sample` 生成，否则下面的端到端演示无法进行。
 
 ### 演示账号
 
-| 角色 | 账号 | 密码 | 数据范围 |
-| --- | --- | --- | --- |
-| 集团管理员 | `admin` | `Admin@12345` | 全国 |
-| 广东负责人 | `gd_user` | `Prov@12345` | 广东省分公司 |
-| 深圳负责人 | `sz_user` | `Prov@12345` | 深圳市分公司 |
-| 北京负责人 | `bj_user` | `Prov@12345` | 北京市分公司 |
-| 江苏负责人 | `js_user` | `Prov@12345` | 江苏省分公司 |
-| 浙江负责人 | `zj_user` | `Prov@12345` | 浙江省分公司 |
+| 角色       | 账号        | 密码            | 数据范围     |
+| ---------- | ----------- | --------------- | ------------ |
+| 集团管理员 | `admin`   | `Admin@12345` | 全国         |
+| 广东负责人 | `gd_user` | `Prov@12345`  | 广东省分公司 |
+| 深圳负责人 | `sz_user` | `Prov@12345`  | 深圳市分公司 |
+| 北京负责人 | `bj_user` | `Prov@12345`  | 北京市分公司 |
+| 江苏负责人 | `js_user` | `Prov@12345`  | 江苏省分公司 |
+| 浙江负责人 | `zj_user` | `Prov@12345`  | 浙江省分公司 |
 
 演示账号仅用于开发环境，上线前必须删除或改密。
 
@@ -43,6 +53,11 @@ npm run dev
 7. 管理员 → 回传与归集 → 查看已通过组织合计、未归集原因，并导出归集 Excel。
 
 样例文件包含深圳优先、广东、未知省份、负数、空金额、文本金额、无效入职月份、缺证件号、前导零证件号、重复记录等边界数据。
+
+## 文档
+
+- [PRD V1.0](保险代理人佣金个税申报数据管理系统_PRD_V1.0.pdf)：需求说明与验收标准（AC-01 ~ AC-14）
+- [HANDOFF.md](HANDOFF.md)：环境版本、开发约定与交接事项
 
 ## 技术栈
 
@@ -71,7 +86,12 @@ src/
   instrumentation.ts        启动进程内任务 worker
 scripts/                    setup / seed / 样例生成 / 冒烟 / 性能测试
 tests/                      规则单测 + 集成测试
+data/                       SQLite 数据库（运行时生成，不入库）
+storage/                    上传原文件、导出文件、回传文件（运行时生成，不入库）
+samples/                    样例 Excel（由 npm run generate:sample 生成，不入库）
 ```
+
+运行时数据与密钥均不入库：`.env.local`、`data/`、`storage/`、`samples/*.xlsx` 已写入 `.gitignore`。
 
 ## 业务规则实现
 
@@ -90,12 +110,12 @@ tests/                      规则单测 + 集成测试
 
 ### 四个 Sheet
 
-| Sheet | 规则 |
-| --- | --- |
-| 1新增人员信息导入 | 入职月份 = M+1 |
-| 2转非 | 入职月份 = M |
-| 3劳动报酬收入 | 全部有效且身份完整记录；固定 13 列；收入 = 应税所得；所得项目固定“保险营销员佣金收入” |
-| 4汇总 | 该组织全部有效源记录，保留源表列顺序和原值 |
+| Sheet             | 规则                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| 1新增人员信息导入 | 入职月份 = M+1                                                                          |
+| 2转非             | 入职月份 = M                                                                            |
+| 3劳动报酬收入     | 全部有效且身份完整记录；固定 13 列；收入 = 应税所得；所得项目固定“保险营销员佣金收入” |
+| 4汇总             | 该组织全部有效源记录，保留源表列顺序和原值                                              |
 
 导出文件名：`{YYYY-MM}_{组织名称}_佣金个税申报数据_V{版本}.xlsx`；固定四个 Sheet、无默认空白 Sheet；证照号码文本格式；空数据仍写表头。
 
@@ -117,13 +137,13 @@ tests/                      规则单测 + 集成测试
 
 ## 配置
 
-| 配置项 | 位置 | 说明 |
-| --- | --- | --- |
-| 字段别名 | 管理员 → 系统配置 → 字段别名 | 追加到默认别名之后；用于识别源表表头 |
-| 回传模板 | 管理员 → 系统配置 → 回传模板 | JSON：sheetNames、columns、headerRow、toleranceCents |
-| 省份映射 | 管理员 → 省份映射 | 源值 → 标准组织；深圳/广东特殊规则始终优先 |
-| 上传限制 | `.env.local` | `MAX_UPLOAD_MB`、`MAX_ROWS` |
-| 加密/会话密钥 | `.env.local` | `APP_ENCRYPTION_KEY`、`APP_ID_HASH_KEY`、`APP_SESSION_SECRET`，由 `npm run setup` 生成 |
+| 配置项        | 位置                           | 说明                                                                                           |
+| ------------- | ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| 字段别名      | 管理员 → 系统配置 → 字段别名 | 追加到默认别名之后；用于识别源表表头                                                           |
+| 回传模板      | 管理员 → 系统配置 → 回传模板 | JSON：sheetNames、columns、headerRow、toleranceCents                                           |
+| 省份映射      | 管理员 → 省份映射             | 源值 → 标准组织；深圳/广东特殊规则始终优先                                                    |
+| 上传限制      | `.env.local`                 | `MAX_UPLOAD_MB`、`MAX_ROWS`                                                                |
+| 加密/会话密钥 | `.env.local`                 | `APP_ENCRYPTION_KEY`、`APP_ID_HASH_KEY`、`APP_SESSION_SECRET`，由 `npm run setup` 生成 |
 
 规则版本固定为 `1.0.0`，批次、导出和比对记录均保存规则版本，便于追溯。
 
@@ -135,22 +155,22 @@ npm test
 
 39 个自动化测试覆盖 PRD AC-01 ~ AC-14：
 
-| 编号 | 覆盖点 | 测试位置 |
-| --- | --- | --- |
-| AC-01 | M/M+1 月份筛选 | `tests/rules/month.test.ts`、`datasets.test.ts` |
-| AC-02 | 100/0/-1/空/文本金额 | `tests/rules/income.test.ts` |
-| AC-03 | 深圳优先 | `tests/rules/org-map.test.ts` |
-| AC-04 | 广东归属 | `tests/rules/org-map.test.ts` |
-| AC-05 | 空省/未知省异常 | `tests/rules/org-map.test.ts` |
-| AC-06 | 跨省越权被拒绝 | `tests/integration/batch-flow.test.ts` |
-| AC-07 | 劳动报酬 13 列固定 | `tests/rules/datasets.test.ts` |
-| AC-08 | 前导零/长证件号文本导出 | `tests/integration/batch-flow.test.ts` |
-| AC-09 | 空组织仍导出四 Sheet | `tests/integration/batch-flow.test.ts` |
-| AC-10 | 四 Sheet 名称/顺序/仅当前组织 | `tests/integration/batch-flow.test.ts` |
-| AC-11 | 汇总守恒 | `tests/rules/conservation.test.ts` |
-| AC-12 | 同月重传新版本/旧版保留 | `tests/integration/batch-flow.test.ts` |
-| AC-13 | 跨年月份 | `tests/rules/month.test.ts` |
-| AC-14 | 下载审计 | `tests/integration/batch-flow.test.ts` |
+| 编号  | 覆盖点                        | 测试位置                                            |
+| ----- | ----------------------------- | --------------------------------------------------- |
+| AC-01 | M/M+1 月份筛选                | `tests/rules/month.test.ts`、`datasets.test.ts` |
+| AC-02 | 100/0/-1/空/文本金额          | `tests/rules/income.test.ts`                      |
+| AC-03 | 深圳优先                      | `tests/rules/org-map.test.ts`                     |
+| AC-04 | 广东归属                      | `tests/rules/org-map.test.ts`                     |
+| AC-05 | 空省/未知省异常               | `tests/rules/org-map.test.ts`                     |
+| AC-06 | 跨省越权被拒绝                | `tests/integration/batch-flow.test.ts`            |
+| AC-07 | 劳动报酬 13 列固定            | `tests/rules/datasets.test.ts`                    |
+| AC-08 | 前导零/长证件号文本导出       | `tests/integration/batch-flow.test.ts`            |
+| AC-09 | 空组织仍导出四 Sheet          | `tests/integration/batch-flow.test.ts`            |
+| AC-10 | 四 Sheet 名称/顺序/仅当前组织 | `tests/integration/batch-flow.test.ts`            |
+| AC-11 | 汇总守恒                      | `tests/rules/conservation.test.ts`                |
+| AC-12 | 同月重传新版本/旧版保留       | `tests/integration/batch-flow.test.ts`            |
+| AC-13 | 跨年月份                      | `tests/rules/month.test.ts`                       |
+| AC-14 | 下载审计                      | `tests/integration/batch-flow.test.ts`            |
 
 另提供：
 
@@ -165,10 +185,22 @@ npm run perf     # 默认 10 万行性能测试，可用 PERF_ROWS 调整
 - 备份时同时备份 `data/` 与 `storage/`，并保证两者时间点一致。
 - `.env.local` 含加密密钥，丢失后已加密的证照号码无法解密，需单独安全备份。
 
+## 生产部署
+
+```bash
+npm ci
+npm run setup
+npm run build
+npm start
+```
+
+- 生产环境必须使用 HTTPS；会话 Cookie 默认带 `Secure`。若临时以 http 调试 `npm start`，需在 `.env.local` 设置 `COOKIE_SECURE=0`。
+- `.env.local`、`data/`、`storage/` 需挂载到持久化卷并纳入备份策略。
+- 内置任务 worker 随应用进程启动（`src/instrumentation.ts`），多实例部署时需确认任务调度不会重复执行。
+
 ## 已知边界
 
 - 当前没有真实佣金总表样表，字段位置、别名、省份取值均为**可配置默认值**；拿到真实样表后请在“系统配置/省份映射”中联调并冻结规则版本。
 - 新增/转非 Sheet 默认保留源表全部业务列；PRD 要求联调后冻结字段清单，可在规则引擎中按需裁剪。
-- 生产部署应使用 HTTPS；生产环境的会话 Cookie 默认带 `Secure`。若在本地用 http 运行 `npm start` 调试，请在 `.env.local` 设置 `COOKIE_SECURE=0`。
 - 本期不包含个税扣缴端自动申报、设备备份迁移、投诉查询、监管报表及与人资/财务系统的自动接口。
-- `npm install` 提示 ExcelJS 传递依赖存在若干安全告警（当前环境无法联网执行 `npm audit fix`）；上线前请按集团安全基线评估并锁定依赖版本。
+- 依赖安全：`npm install` 可能提示 ExcelJS 传递依赖的安全告警，上线前请按集团安全基线执行 `npm audit` 评估并锁定依赖版本。
